@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import ReactECharts from 'echarts-for-react';
-import { Activity, Zap, Shield, HelpCircle, ChevronRight, Play } from 'lucide-react';
+import { Activity, Zap, Shield, ChevronRight, Play } from 'lucide-react';
 
 export default function Dashboard() {
   const [sourceCurrency, setSourceCurrency] = useState('USD');

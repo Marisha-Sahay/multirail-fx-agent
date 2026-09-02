@@ -1,4 +1,3 @@
-import React from 'react';
 import { X, Server, Database, Globe, ArrowRight } from 'lucide-react';
 
 interface DrawerProps {

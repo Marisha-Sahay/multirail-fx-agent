@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Menu, Globe2 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import ArchitectureDrawer from './components/ArchitectureDrawer';
