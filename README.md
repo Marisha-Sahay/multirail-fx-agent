@@ -1,5 +1,7 @@
 # Multirail FX Agent
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
 A production-ready, full-stack payment routing engine that intelligently routes cross-border payments across traditional banking rails (SWIFT), Card Networks (Visa Direct), and modern Fintech APIs (Wise).
 
 The agent fetches real-time mid-market exchange rates, parses dynamic fee structures, and recommends the optimal payout rail based on user-defined priorities (Lowest Cost, Fastest Speed, or Balanced).
@@ -90,3 +92,13 @@ Make sure to add the `WISE_SANDBOX_TOKEN` environment variable in your Vercel pr
 - **Frontend:** React (TypeScript), Vite, Tailwind CSS v3, Lucide React Icons
 - **Data Viz:** Apache ECharts (`echarts`, `echarts-for-react`)
 - **Backend:** Node.js (Vercel Serverless Functions)
+
+## Contributing
+
+We welcome contributions from the open-source community! Whether it's adding new payment rail APIs, improving the UI, or fixing bugs, your help is appreciated.
+
+Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to get started.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
