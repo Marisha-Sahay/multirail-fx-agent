@@ -1,6 +1,25 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactECharts from 'echarts-for-react';
-import { Activity, Zap, Shield, ChevronRight, Play } from 'lucide-react';
+import { Activity, Zap, Shield, ChevronRight, ArrowRight, Clock, Info } from 'lucide-react';
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$', EUR: '€', GBP: '£', INR: '₹', BRL: 'R$', MXN: '$'
+};
+
+const SOURCE_CURRENCIES = [
+  { code: 'USD', name: 'US Dollar' },
+  { code: 'EUR', name: 'Euro' },
+  { code: 'GBP', name: 'British Pound' },
+];
+
+const TARGET_CURRENCIES = [
+  { code: 'EUR', name: 'Euro' },
+  { code: 'GBP', name: 'British Pound' },
+  { code: 'INR', name: 'Indian Rupee' },
+  { code: 'BRL', name: 'Brazilian Real' },
+  { code: 'MXN', name: 'Mexican Peso' },
+  { code: 'USD', name: 'US Dollar' },
+];
 
 export default function Dashboard() {
   const [sourceCurrency, setSourceCurrency] = useState('USD');
@@ -17,6 +36,17 @@ export default function Dashboard() {
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
+
+  // Prevent same-currency selection: auto-switch target if it matches source
+  useEffect(() => {
+    if (sourceCurrency === targetCurrency) {
+      const fallback = TARGET_CURRENCIES.find(c => c.code !== sourceCurrency);
+      if (fallback) setTargetCurrency(fallback.code);
+    }
+  }, [sourceCurrency, targetCurrency]);
+
+  const availableTargets = TARGET_CURRENCIES.filter(c => c.code !== sourceCurrency);
+  const currencySymbol = CURRENCY_SYMBOLS[sourceCurrency] || sourceCurrency;
 
   const handleRoutePayment = async () => {
     setIsRouting(true);
@@ -92,7 +122,7 @@ export default function Dashboard() {
         {/* Controls Card */}
         <div className="bg-card border border-border rounded-2xl p-6 shadow-xl">
           <h2 className="text-xl font-bold mb-6 flex items-center">
-            <Activity className="mr-2 text-primary" /> Routing Engine Parameters
+            <Activity className="mr-2 text-primary" /> Transfer Details
           </h2>
           
           <div className="space-y-4">
@@ -104,9 +134,9 @@ export default function Dashboard() {
                   onChange={(e) => setSourceCurrency(e.target.value)}
                   className="w-full bg-background border border-border rounded-lg p-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                 >
-                  <option value="USD">USD - US Dollar</option>
-                  <option value="EUR">EUR - Euro</option>
-                  <option value="GBP">GBP - British Pound</option>
+                  {SOURCE_CURRENCIES.map(c => (
+                    <option key={c.code} value={c.code}>{c.code} - {c.name}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -116,11 +146,9 @@ export default function Dashboard() {
                   onChange={(e) => setTargetCurrency(e.target.value)}
                   className="w-full bg-background border border-border rounded-lg p-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                 >
-                  <option value="EUR">EUR - Euro</option>
-                  <option value="GBP">GBP - British Pound</option>
-                  <option value="INR">INR - Indian Rupee</option>
-                  <option value="BRL">BRL - Brazilian Real</option>
-                  <option value="MXN">MXN - Mexican Peso</option>
+                  {availableTargets.map(c => (
+                    <option key={c.code} value={c.code}>{c.code} - {c.name}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -128,7 +156,7 @@ export default function Dashboard() {
             <div>
               <label className="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wider">Amount</label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">{currencySymbol}</span>
                 <input 
                   type="number" 
                   value={amount} 
@@ -174,7 +202,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <>
-                  <Play size={18} className="mr-2" /> Execute Payment Agent
+                  <ArrowRight size={18} className="mr-2" /> Compare Routes
                 </>
               )}
             </button>
@@ -225,7 +253,7 @@ export default function Dashboard() {
           {!quoteResult && !isRouting && (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-500 border-2 border-dashed border-border rounded-xl">
               <Activity size={48} className="mb-4 opacity-50" />
-              <p>Configure parameters and execute agent to view analytics.</p>
+              <p>Configure parameters and compare routes to view analytics.</p>
             </div>
           )}
 
@@ -239,25 +267,46 @@ export default function Dashboard() {
           {quoteResult && !isRouting && (
             <div className="flex-1 flex flex-col space-y-6 animate-in fade-in zoom-in-95 duration-500">
               
+              {/* Mid-market rate badge */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="bg-background border border-border rounded-lg px-4 py-2 text-sm flex items-center gap-2">
+                  <Info size={14} className="text-gray-400" />
+                  <span className="text-gray-400">Mid-market rate:</span>
+                  <span className="text-white font-mono font-bold">1 {sourceCurrency} = {quoteResult.midMarketRate.toFixed(4)} {targetCurrency}</span>
+                </div>
+              </div>
+
               {/* Highlight Card */}
               {(() => {
                 const winner = quoteResult.rails.find((r: any) => r.id === quoteResult.winningRail);
-                const swift = quoteResult.rails.find((r: any) => r.id === 'swift');
-                const savings = swift.payout - winner.payout < 0 ? (winner.payout - swift.payout) : 0;
+                // Find the next-best rail (highest payout that isn't the winner)
+                const otherRails = quoteResult.rails
+                  .filter((r: any) => r.id !== quoteResult.winningRail)
+                  .sort((a: any, b: any) => b.payout - a.payout);
+                const nextBest = otherRails[0];
+                const savings = winner.payout - nextBest.payout;
                 
                 return (
                   <div className="bg-gradient-to-r from-accent/20 to-primary/20 border border-accent/30 rounded-xl p-6 flex items-center justify-between">
                     <div>
                       <p className="text-accent text-sm font-bold uppercase tracking-wider mb-1">Recommended Route</p>
                       <h3 className="text-2xl font-bold text-white">{winner.name}</h3>
-                      <p className="text-gray-300 mt-1 flex items-center">
-                        Settles in {winner.speed} <ChevronRight size={14} className="mx-1 text-gray-500"/> Payout: {winner.payout.toFixed(2)} {targetCurrency}
-                      </p>
+                      <div className="flex items-center gap-3 mt-2 flex-wrap">
+                        <p className="text-gray-300 flex items-center">
+                          <Clock size={14} className="mr-1.5 text-gray-400" />
+                          Settles in {winner.speed}
+                        </p>
+                        <ChevronRight size={14} className="text-gray-500 hidden sm:block"/>
+                        <p className="text-gray-300">
+                          Payout: <span className="text-white font-bold">{winner.payout.toFixed(2)} {targetCurrency}</span>
+                        </p>
+                      </div>
                     </div>
                     {savings > 0 && (
                       <div className="text-right">
-                        <p className="text-gray-400 text-sm">Savings vs SWIFT</p>
+                        <p className="text-gray-400 text-sm">Savings vs {nextBest.name}</p>
                         <p className="text-3xl font-black text-accent">+{savings.toFixed(2)}</p>
+                        <p className="text-gray-500 text-xs">{targetCurrency}</p>
                       </div>
                     )}
                   </div>
@@ -276,28 +325,47 @@ export default function Dashboard() {
                     <tr className="border-b border-border text-gray-400 text-xs uppercase tracking-wider">
                       <th className="p-3">Rail Network</th>
                       <th className="p-3">FX Spread</th>
-                      <th className="p-3">Flat Fee (Est USD)</th>
+                      <th className="p-3">Flat Fee ({sourceCurrency})</th>
+                      <th className="p-3">Speed</th>
                       <th className="p-3 text-right">Final Payout</th>
                     </tr>
                   </thead>
                   <tbody className="text-sm">
-                    {quoteResult.rails.map((rail: any) => (
-                      <tr 
-                        key={rail.id} 
-                        className={`border-b border-border/50 hover:bg-white/5 transition-colors ${rail.id === quoteResult.winningRail ? 'bg-primary/5' : ''}`}
-                      >
-                        <td className="p-3 font-semibold flex items-center">
-                          {rail.id === quoteResult.winningRail && <Zap size={14} className="text-accent mr-2" />}
-                          {rail.name}
-                        </td>
-                        <td className="p-3 text-red-400 font-mono">-{rail.feeSpread.toFixed(2)}%</td>
-                        <td className="p-3 text-gray-300 font-mono">-${rail.feeFlat.toFixed(2)}</td>
-                        <td className="p-3 text-right font-bold text-white font-mono">{rail.payout.toFixed(2)} {targetCurrency}</td>
-                      </tr>
-                    ))}
+                    {quoteResult.rails.map((rail: any) => {
+                      // Determine best-in-class labels
+                      const isBestCost = rail.payout === Math.max(...quoteResult.rails.map((r: any) => r.payout));
+                      const isBestSpeed = rail.speedScore === Math.max(...quoteResult.rails.map((r: any) => r.speedScore));
+
+                      return (
+                        <tr 
+                          key={rail.id} 
+                          className={`border-b border-border/50 hover:bg-white/5 transition-colors ${rail.id === quoteResult.winningRail ? 'bg-primary/5' : ''}`}
+                        >
+                          <td className="p-3 font-semibold flex items-center gap-2">
+                            {rail.id === quoteResult.winningRail && <Zap size={14} className="text-accent" />}
+                            {rail.name}
+                            {isBestCost && <span className="text-[9px] bg-accent/20 text-accent px-1.5 py-0.5 rounded font-bold uppercase">Best value</span>}
+                            {isBestSpeed && !isBestCost && <span className="text-[9px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-bold uppercase">Fastest</span>}
+                          </td>
+                          <td className="p-3 text-red-400 font-mono">-{rail.feeSpread.toFixed(2)}%</td>
+                          <td className="p-3 text-gray-300 font-mono">-{currencySymbol}{rail.feeFlat.toFixed(2)}</td>
+                          <td className="p-3 text-gray-300 flex items-center gap-1.5">
+                            <Clock size={12} className="text-gray-500" />
+                            {rail.speed}
+                          </td>
+                          <td className="p-3 text-right font-bold text-white font-mono">{rail.payout.toFixed(2)} {targetCurrency}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
+
+              {/* Regulatory disclaimer */}
+              <p className="text-[11px] text-gray-500 text-center mt-2 px-4">
+                Rates are indicative and sourced from open mid-market data. Actual rates may vary at the time of transfer. 
+                This tool provides comparison quotes only and does not initiate payments.
+              </p>
 
             </div>
           )}

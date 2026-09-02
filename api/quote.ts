@@ -40,7 +40,7 @@ export default async function handler(req, res) {
     const swiftAmountAfterFee = Math.max(0, amount - swiftFlatFeeSource);
     const swiftPayout = swiftAmountAfterFee * swiftRate;
     
-    logs.push(`[DATA] SWIFT Spread: 1.5%, Flat Fee: ~$25. Est. Payout: ${swiftPayout.toFixed(2)} ${targetCurrency}`);
+    logs.push(`[DATA] SWIFT Spread: 1.5%, Flat Fee: ~${swiftFlatFeeSource.toFixed(2)} ${sourceCurrency}. Est. Payout: ${swiftPayout.toFixed(2)} ${targetCurrency}`);
 
     // 3. Compute Rail: Visa Direct
     logs.push(`[CALC] Computing Visa Direct Rail...`);
@@ -52,12 +52,13 @@ export default async function handler(req, res) {
     const visaAmountAfterFee = Math.max(0, amount - visaFlatFeeSource);
     const visaPayout = visaAmountAfterFee * visaRate;
     
-    logs.push(`[DATA] Visa Direct Spread: 0.7%, Flat Fee: ~$1.75. Est. Payout: ${visaPayout.toFixed(2)} ${targetCurrency}`);
+    logs.push(`[DATA] Visa Direct Spread: 0.7%, Flat Fee: ~${visaFlatFeeSource.toFixed(2)} ${sourceCurrency}. Est. Payout: ${visaPayout.toFixed(2)} ${targetCurrency}`);
 
     // 4. Compute Rail: Wise
     logs.push(`[CALC] Computing Wise Rail...`);
     let wiseDynamicFee = 0.0045; // Default 0.45%
-    let wiseFlatFeeSource = 1.5 * usdToSource; // $1.50 approx base fee
+    let wiseFlatFeeUSD = 1.5;
+    let wiseFlatFeeSource = wiseFlatFeeUSD * usdToSource;
 
     if (process.env.WISE_SANDBOX_TOKEN) {
       logs.push(`[INFO] WISE_SANDBOX_TOKEN detected. Querying Wise Sandbox for dynamic quote...`);
@@ -71,7 +72,7 @@ export default async function handler(req, res) {
 
     const wiseAmountAfterFee = Math.max(0, amount - wiseFlatFeeSource);
     const wisePayout = wiseAmountAfterFee * midMarketRate * (1 - wiseDynamicFee);
-    logs.push(`[DATA] Wise Spread/Fee: ${(wiseDynamicFee*100).toFixed(2)}%, Flat Fee: ~$1.50. Est. Payout: ${wisePayout.toFixed(2)} ${targetCurrency}`);
+    logs.push(`[DATA] Wise Spread/Fee: ${(wiseDynamicFee*100).toFixed(2)}%, Flat Fee: ~${wiseFlatFeeSource.toFixed(2)} ${sourceCurrency}. Est. Payout: ${wisePayout.toFixed(2)} ${targetCurrency}`);
 
     // 5. Routing Engine Decision
     logs.push(`[EVAL] Evaluating Priority: ${priority}`);
@@ -82,7 +83,7 @@ export default async function handler(req, res) {
         name: 'SWIFT Network',
         payout: swiftPayout,
         feeSpread: swiftSpread * 100,
-        feeFlat: swiftFlatFeeUSD, // display in USD for simplicity
+        feeFlat: swiftFlatFeeSource,
         speed: '24-48 hours',
         speedScore: 1
       },
@@ -91,7 +92,7 @@ export default async function handler(req, res) {
         name: 'Visa Direct',
         payout: visaPayout,
         feeSpread: visaSpread * 100,
-        feeFlat: visaFlatFeeUSD,
+        feeFlat: visaFlatFeeSource,
         speed: '< 30 seconds',
         speedScore: 3
       },
@@ -100,7 +101,7 @@ export default async function handler(req, res) {
         name: 'Wise API',
         payout: wisePayout,
         feeSpread: wiseDynamicFee * 100,
-        feeFlat: 1.5,
+        feeFlat: wiseFlatFeeSource,
         speed: '~4 hours',
         speedScore: 2
       }
@@ -114,13 +115,18 @@ export default async function handler(req, res) {
       winningRail = rails.reduce((prev, current) => (prev.speedScore > current.speedScore) ? prev : current);
       logs.push(`[DECISION] FASTEST_SPEED selected. Winner: ${winningRail.name} with speed ${winningRail.speed}`);
     } else {
-      // BALANCED (Weigh payout heavily, but penalize slow speed)
-      logs.push(`[DECISION] BALANCED selected. Scoring rails...`);
+      // BALANCED: Normalize payout to 0-100 scale, then combine with weighted speed score
+      logs.push(`[DECISION] BALANCED selected. Normalizing payout scores...`);
+      const maxPayout = Math.max(...rails.map(r => r.payout));
+      const minPayout = Math.min(...rails.map(r => r.payout));
+      const payoutRange = maxPayout - minPayout || 1;
+      
       let bestScore = -Infinity;
       rails.forEach(rail => {
-        // Simple heuristic: normalize payout vs best payout, and add speed score
-        const payoutScore = rail.payout; 
-        const combinedScore = payoutScore + (rail.speedScore * 10); // Arbitrary weight
+        const normalizedPayout = ((rail.payout - minPayout) / payoutRange) * 100;
+        const normalizedSpeed = (rail.speedScore / 3) * 100; // Max speedScore is 3
+        const combinedScore = (normalizedPayout * 0.6) + (normalizedSpeed * 0.4);
+        logs.push(`[EVAL] ${rail.name}: Payout=${normalizedPayout.toFixed(1)}/100, Speed=${normalizedSpeed.toFixed(1)}/100, Combined=${combinedScore.toFixed(1)}`);
         if (combinedScore > bestScore) {
           bestScore = combinedScore;
           winningRail = rail;
@@ -133,6 +139,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       midMarketRate,
+      sourceCurrency,
       winningRail: winningRail.id,
       rails,
       logs
